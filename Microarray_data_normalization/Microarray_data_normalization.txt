@@ -1,0 +1,63 @@
+# Load required libraries
+# affy: for reading Affymetrix CEL files
+# GEOquery: for downloading GEO datasets
+# tidyverse: for data manipulation
+# writexl: for writing Excel files
+library(affy)
+library(GEOquery)
+library(tidyverse)
+library(writexl)
+
+# Check current working directory
+getwd()
+
+# -----------------------------
+# Step 1: Download GEO supplementary files (optional)
+# -----------------------------
+# Uncomment the following line if you want to download raw CEL files
+# getGEOSuppFiles("GSE28521")
+
+# -----------------------------
+# Step 2: Extract CEL files from tar archive (optional)
+# -----------------------------
+# Uncomment and modify the path if you have a .tar file
+# untar("GSE28521/GSE28521_RAW.tar", exdir = 'C:/Users/Muhammad Shohel/Documents/GSE28521/')
+
+# -----------------------------
+# Step 3: Read CEL files
+# -----------------------------
+# Provide the directory where your CEL files are located
+raw.data <- ReadAffy(celfile.path = "C:/Users/Muhammad Shohel/Documents/GSE12679_CEL")
+
+# -----------------------------
+# Step 4: Perform RMA normalization
+# RMA: Robust Multi-array Average
+# -----------------------------
+normalized.data <- rma(raw.data)
+
+# -----------------------------
+# Step 5: Extract normalized expression values
+# -----------------------------
+normalized.expr <- as.data.frame(exprs(normalized.data))
+
+# -----------------------------
+# Step 6: Map probe IDs to gene symbols
+# Download GEO dataset metadata
+# -----------------------------
+gse <- getGEO("GSE12679", GSEMatrix = TRUE)
+
+# Fetch feature data to map probe IDs to gene symbols
+feature.data <- gse$GSE12679_series_matrix.txt.gz@featureData@data
+
+# Select only relevant columns: ID and gene symbol (modify if needed)
+feature.data <- feature.data[,c(1,11)]
+
+# Merge normalized expression with gene symbol information
+normalized.expr <- normalized.expr %>%
+  rownames_to_column(var = 'ID') %>%      # move rownames (probe IDs) to a column
+  inner_join(., feature.data, by = 'ID')  # join with feature data
+
+# -----------------------------
+# Step 7: Save normalized expression with gene symbols to Excel
+# -----------------------------
+write_xlsx(normalized.expr, path = "GSE12679_recheck.xlsx")

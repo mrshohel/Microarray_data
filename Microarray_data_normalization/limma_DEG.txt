@@ -1,0 +1,52 @@
+# Load required libraries
+library(readxl)
+library(writexl)
+library(limma)
+library(dplyr)
+
+# Step 1: Read normalized expression data
+expr_data <- as.data.frame(read_excel("GSE12679.xlsx"))
+
+# Step 2: Set probe IDs as rownames
+rownames(expr_data) <- expr_data$ID
+
+# Step 3: Extract expression matrix (remove ID and Gene Symbol)
+expr_matrix <- expr_data[, !(names(expr_data) %in% c("ID", "Gene Symbol"))]
+
+# Step 4: Define group — First 5 = Disease, Last 6 = Control
+group <- factor(c(rep("Disease", 5), rep("Control", 6)))
+
+# Step 5: Create design matrix
+design <- model.matrix(~ group)
+
+# Step 6: Run limma differential expression analysis
+fit <- lmFit(expr_matrix, design)
+fit <- eBayes(fit)
+deg_results <- topTable(fit, coef = 2, number = Inf, adjust.method = "none")
+
+# Step 7: Add probe ID and gene symbol
+deg_results <- tibble::rownames_to_column(deg_results, var = "ID")
+gene_map <- expr_data[, c("ID", "Gene Symbol")]
+deg_results <- left_join(deg_results, gene_map, by = "ID")
+
+# Step 8: Classify DEG status
+deg_results <- deg_results %>%
+  mutate(status = case_when(
+    logFC >= 0.5 & P.Value < 0.05 ~ "Upregulated",
+    logFC <= -0.5 & P.Value < 0.05 ~ "Downregulated",
+    TRUE ~ "Not Significant"
+  ))
+
+# Step 9: Count DEGs
+up_count <- sum(deg_results$status == "Upregulated")
+down_count <- sum(deg_results$status == "Downregulated")
+total_dysregulated <- up_count + down_count
+
+# Step 10: Print summary to console
+cat("⬆️ Upregulated genes:", up_count, "\n")
+cat("⬇️ Downregulated genes:", down_count, "\n")
+cat("🧬 Total dysregulated genes:", total_dysregulated, "\n")
+
+# Step 11: Save all results
+write_xlsx(deg_results, "DEG_Results_Limma.xlsx")
+
